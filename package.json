@@ -1,0 +1,23 @@
+{
+  "name": "@sdinteractive/requirejs-loader",
+  "version": "1.0.0",
+  "description": "webpack loader to import requirejs browser published modules.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sdinteractive/webpack-requirejs-loader.git"
+  },
+  "keywords": [
+    "webpack",
+    "requirejs"
+  ],
+  "author": "Something Digital",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sdinteractive/webpack-requirejs-loader/issues"
+  },
+  "homepage": "https://github.com/sdinteractive/webpack-requirejs-loader#readme"
+}
