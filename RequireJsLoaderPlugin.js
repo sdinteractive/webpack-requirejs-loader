@@ -30,6 +30,11 @@ function generateEpilog(imports) {
 RequireJsLoaderPlugin.prototype.apply = function(compiler) {
     compiler.plugin('compilation', (compilation, data) => {
         compilation.plugin('chunk-asset', (chunk, filename) => {
+            // Avoid applying imports twice.
+            if ('--requirejs-export:done' in chunk) {
+                return;
+            }
+
             const needsImport = gatherRequireJsImports(chunk.modules);
             if (needsImport.length != 0) {
                 let prolog = generateProlog(needsImport);
