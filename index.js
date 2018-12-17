@@ -11,7 +11,8 @@ module.exports.pitch = function(remainingRequest) {
 
     // Route through window.require.
     // TODO: We use rawRequest to grab the original request (including text! or etc.)
-    const jsonName = JSON.stringify(this._module.rawRequest);
+    const prefix = (this._module.rawRequest == 'jquery') ? 'mixins!' : '';
+    const jsonName = JSON.stringify(prefix + this._module.rawRequest);
     return `module.exports = window.require(${jsonName});`;
 };
 
