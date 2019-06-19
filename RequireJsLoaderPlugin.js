@@ -9,11 +9,10 @@ function gatherRequireJsImports(modules) {
     let needsImport = [];
     for (let module of modules) {
         // If the requirejs-loader was used, then we need to wrap and import this module.
+        // It's safe to use mixins! in all cases, and necessary for anything where require('mixins').hasMixins(module) is true.
         // TODO: Clean up this check.
-        if (module.request && String(module.request).indexOf('jquery.js') !== -1) {
+        if (module.request && module.request.indexOf('requirejs-loader') !== -1) {
             needsImport.push('mixins!' + module.rawRequest);
-        } else if (module.request && module.request.indexOf('requirejs-loader') !== -1) {
-            needsImport.push(module.rawRequest);
         }
     }
 
