@@ -2,12 +2,12 @@
 
 const ConcatSource = require('webpack-sources').ConcatSource;
 
-let RequireJsLoaderPlugin = function() {
+let RequireJsLoaderPlugin = function () {
 };
 
 function gatherRequireJsImports(modules) {
     let needsImport = [];
-    for (var module of modules) {
+    for (let module of modules) {
         // If the requirejs-loader was used, then we need to wrap and import this module.
         // TODO: Clean up this check.
         if (module.request && String(module.request).indexOf('jquery.js') !== -1) {
@@ -22,14 +22,14 @@ function gatherRequireJsImports(modules) {
 
 function generateProlog(imports) {
     const jsonImports = JSON.stringify(imports);
-    return `window.require(${jsonImports}, function() {`;
+    return `window.require(${jsonImports}, function () {`;
 }
 
 function generateEpilog(imports) {
     return `});`;
 }
 
-RequireJsLoaderPlugin.prototype.apply = function(compiler) {
+RequireJsLoaderPlugin.prototype.apply = function (compiler) {
     compiler.plugin('compilation', (compilation, data) => {
         compilation.plugin('chunk-asset', (chunk, filename) => {
             // Avoid applying imports twice.

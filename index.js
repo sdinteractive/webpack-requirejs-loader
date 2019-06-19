@@ -3,10 +3,10 @@
 const path = require('path');
 const ConcatSource = require('webpack-sources').ConcatSource;
 
-module.exports = function() {
+module.exports = function () {
 };
 
-module.exports.pitch = function(remainingRequest) {
+module.exports.pitch = function (remainingRequest) {
 	this.cacheable && this.cacheable();
 
     // Route through window.require.
