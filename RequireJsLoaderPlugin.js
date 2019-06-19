@@ -29,15 +29,24 @@ function generateEpilog(imports) {
     return `});`;
 }
 
+function registerHook(object, oldName, newName, cb) {
+    if (object.hooks) {
+        object.hooks[newName].tap('RequireJsLoader', cb);
+    } else {
+        object.plugin(oldName, cb);
+    }
+}
+
 RequireJsLoaderPlugin.prototype.apply = function (compiler) {
-    compiler.plugin('compilation', (compilation, data) => {
-        compilation.plugin('chunk-asset', (chunk, filename) => {
+    registerHook(compiler, 'compilation', 'compilation', (compilation, data) => {
+        registerHook(compilation, 'chunk-asset', 'chunkAsset', (chunk, filename) => {
             // Avoid applying imports twice.
             if ('--requirejs-export:done' in chunk) {
                 return;
             }
 
-            const needsImport = gatherRequireJsImports(chunk.modules);
+            const modules = chunk.modulesIterable ? Array.from(chunk.modulesIterable) : modules;
+            const needsImport = gatherRequireJsImports(modules);
             if (needsImport.length != 0) {
                 let prolog = generateProlog(needsImport);
                 let epilog = generateEpilog(needsImport);
