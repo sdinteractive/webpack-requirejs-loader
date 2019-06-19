@@ -1,6 +1,6 @@
 {
   "name": "@sdinteractive/requirejs-loader",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "webpack loader to import requirejs browser published modules.",
   "main": "index.js",
   "scripts": {

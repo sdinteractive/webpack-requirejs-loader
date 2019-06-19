@@ -2,18 +2,17 @@
 
 const ConcatSource = require('webpack-sources').ConcatSource;
 
-let RequireJsLoaderPlugin = function() {
+let RequireJsLoaderPlugin = function () {
 };
 
 function gatherRequireJsImports(modules) {
     let needsImport = [];
-    for (var module of modules) {
+    for (let module of modules) {
         // If the requirejs-loader was used, then we need to wrap and import this module.
+        // It's safe to use mixins! in all cases, and necessary for anything where require('mixins').hasMixins(module) is true.
         // TODO: Clean up this check.
-        if (module.request && String(module.request).indexOf('jquery.js') !== -1) {
+        if (module.request && module.request.indexOf('requirejs-loader') !== -1) {
             needsImport.push('mixins!' + module.rawRequest);
-        } else if (module.request && module.request.indexOf('requirejs-loader') !== -1) {
-            needsImport.push(module.rawRequest);
         }
     }
 
@@ -22,22 +21,31 @@ function gatherRequireJsImports(modules) {
 
 function generateProlog(imports) {
     const jsonImports = JSON.stringify(imports);
-    return `window.require(${jsonImports}, function() {`;
+    return `window.require(${jsonImports}, function () {`;
 }
 
 function generateEpilog(imports) {
     return `});`;
 }
 
-RequireJsLoaderPlugin.prototype.apply = function(compiler) {
-    compiler.plugin('compilation', (compilation, data) => {
-        compilation.plugin('chunk-asset', (chunk, filename) => {
+function registerHook(object, oldName, newName, cb) {
+    if (object.hooks) {
+        object.hooks[newName].tap('RequireJsLoader', cb);
+    } else {
+        object.plugin(oldName, cb);
+    }
+}
+
+RequireJsLoaderPlugin.prototype.apply = function (compiler) {
+    registerHook(compiler, 'compilation', 'compilation', (compilation, data) => {
+        registerHook(compilation, 'chunk-asset', 'chunkAsset', (chunk, filename) => {
             // Avoid applying imports twice.
             if ('--requirejs-export:done' in chunk) {
                 return;
             }
 
-            const needsImport = gatherRequireJsImports(chunk.modules);
+            const modules = chunk.modulesIterable ? Array.from(chunk.modulesIterable) : modules;
+            const needsImport = gatherRequireJsImports(modules);
             if (needsImport.length != 0) {
                 let prolog = generateProlog(needsImport);
                 let epilog = generateEpilog(needsImport);
