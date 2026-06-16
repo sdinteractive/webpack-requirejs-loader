@@ -1,58 +1,92 @@
 'use strict';
 
-const ConcatSource = require('webpack-sources').ConcatSource;
+const { ConcatSource } = require('webpack-sources');
+
+// Matches window.require("mixins!foo") or window.require('mixins!foo') in asset source
+const MIXINS_PATTERN = /window\.require\(["'](mixins![^"']+)["']\)/g;
 
 let RequireJsLoaderPlugin = function () {
 };
 
-function gatherRequireJsImports(modules) {
-    let needsImport = [];
-    for (let module of modules) {
-        // If the requirejs-loader was used, then we need to wrap and import this module.
-        // It's safe to use mixins! in all cases, and necessary for anything where require('mixins').hasMixins(module) is true.
-        // TODO: Clean up this check.
-        if (module.request && module.request.indexOf('requirejs-loader') !== -1) {
-            needsImport.push('mixins!' + module.rawRequest);
-        }
+/**
+ * Scan compiled asset source for window.require("mixins!...") calls.
+ * This is more reliable than module enumeration because webpack 5 scope-hoisting
+ * (ConcatenatedModule) hides inner modules from chunkGraph iteration.
+ */
+function gatherImportsFromSource(source) {
+    const imports = new Set();
+    let match;
+    MIXINS_PATTERN.lastIndex = 0;
+    while ((match = MIXINS_PATTERN.exec(source)) !== null) {
+        imports.add(match[1]);
     }
-
-    return needsImport;
+    return Array.from(imports);
 }
 
 function generateProlog(imports) {
-    const jsonImports = JSON.stringify(imports);
-    return `window.require(${jsonImports}, function () {`;
+    return `window.require(${JSON.stringify(imports)}, function () {`;
 }
 
-function generateEpilog(imports) {
+function generateEpilog() {
     return `});`;
 }
 
-function registerHook(object, oldName, newName, cb) {
-    if (object.hooks) {
-        object.hooks[newName].tap('RequireJsLoader', cb);
-    } else {
-        object.plugin(oldName, cb);
-    }
-}
-
 RequireJsLoaderPlugin.prototype.apply = function (compiler) {
-    registerHook(compiler, 'compilation', 'compilation', (compilation, data) => {
-        registerHook(compilation, 'chunk-asset', 'chunkAsset', (chunk, filename) => {
-            // Avoid applying imports twice.
-            if ('--requirejs-export:done' in chunk) {
-                return;
-            }
+    compiler.hooks.compilation.tap('RequireJsLoader', (compilation) => {
+        if (compilation.hooks.processAssets) {
+            // webpack 5
+            const webpack = compiler.webpack || require('webpack');
+            compilation.hooks.processAssets.tap(
+                {
+                    name: 'RequireJsLoader',
+                    stage: webpack.Compilation
+                        ? webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_COMPATIBILITY
+                        : 1000,
+                },
+                (assets) => {
+                    const processed = new Set();
+                    for (const [filename, asset] of Object.entries(assets)) {
+                        if (processed.has(filename)) continue;
 
-            const modules = chunk.modulesIterable ? Array.from(chunk.modulesIterable) : modules;
-            const needsImport = gatherRequireJsImports(modules);
-            if (needsImport.length != 0) {
-                let prolog = generateProlog(needsImport);
-                let epilog = generateEpilog(needsImport);
+                        const source = asset.source();
+                        // Only wrap JS files that actually contain requirejs-loader calls
+                        if (typeof source !== 'string' || !source.includes('window.require("mixins!')) {
+                            continue;
+                        }
 
-                compilation.assets[filename] = new ConcatSource(prolog, "\n", compilation.assets[filename], "\n", epilog);
-            }
-        });
+                        const needsImport = gatherImportsFromSource(source);
+                        if (needsImport.length === 0) continue;
+
+                        compilation.updateAsset(
+                            filename,
+                            old => new ConcatSource(generateProlog(needsImport), '\n', old, '\n', generateEpilog())
+                        );
+                        processed.add(filename);
+                    }
+                }
+            );
+        } else {
+            // webpack 4 fallback: module enumeration still works here
+            compilation.hooks.chunkAsset.tap('RequireJsLoader', (chunk, filename) => {
+                if (chunk.__requirejsLoaderDone) return;
+
+                const modules = chunk.modulesIterable ? Array.from(chunk.modulesIterable) : [];
+                const needsImport = [];
+                for (const mod of modules) {
+                    if (mod.request && mod.request.indexOf('requirejs-loader') !== -1) {
+                        needsImport.push('mixins!' + mod.rawRequest);
+                    }
+                }
+                if (needsImport.length === 0) return;
+
+                compilation.assets[filename] = new ConcatSource(
+                    generateProlog(needsImport), '\n',
+                    compilation.assets[filename], '\n',
+                    generateEpilog()
+                );
+                chunk.__requirejsLoaderDone = true;
+            });
+        }
     });
 };
 
