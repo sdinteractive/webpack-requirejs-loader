@@ -6,18 +6,44 @@ module.exports = function () {
 module.exports.pitch = function (remainingRequest) {
     this.cacheable && this.cacheable();
 
-    // Route through window.require.
-    // It's safe to use mixins! in all cases, and necessary for anything where require('mixins').hasMixins(module) is true.
-    // webpack 5: rawRequest is still on NormalModule but accessed via this._module
-    const rawRequest = this._module && this._module.rawRequest;
-    const jsonName = JSON.stringify('mixins!' + rawRequest);
+    const options = (this.getOptions ? this.getOptions() : this.query) || {};
 
-    // For jquery, fall back to window.jQuery if the RequireJS proxy hasn't resolved .fn yet
-    if (rawRequest === 'jquery') {
-        return `var _r=window.require(${jsonName});module.exports=(_r&&_r.fn)?_r:(window.jQuery||_r);`;
+    // This loader is normally applied via a `module.rules` entry rather than an
+    // inline `mixins!` prefix, so `remainingRequest` here resolves to the absolute
+    // filesystem path of the file, not the bare specifier (e.g. "jquery", or a
+    // RequireJS-style module id) that was originally written in source. We need
+    // that original, unresolved specifier to build a `window.require(...)` id
+    // RequireJS will actually recognize. `this._module.rawRequest` is the only
+    // way to recover it; it's a documented-but-discouraged loader context
+    // property webpack has flagged for eventual removal, but there's currently
+    // no public replacement that preserves the as-written request, so we keep
+    // using it and only fall back to `remainingRequest` if it's unavailable.
+    const rawRequest = (this._module && this._module.rawRequest) || remainingRequest;
+    const requestName = String(rawRequest).replace(/^mixins!/, '').replace(/\.js$/, '');
+
+    if (options.debug) {
+        console.log('[requirejs-loader] pitch', {
+            resourcePath: this.resourcePath,
+            remainingRequest,
+            rawRequest,
+            requestName,
+        });
     }
 
-    return `module.exports = window.require(${jsonName});`;
+    let output;
+    if (requestName === 'jquery') {
+        const jqueryRequest = JSON.stringify('mixins!' + requestName);
+        output = `module.exports = window.jQuery || window.$ || (typeof window.require === 'function' ? window.require(${jqueryRequest}) : undefined);`;
+    } else {
+        const jsonName = JSON.stringify('mixins!' + requestName);
+        output = `module.exports = window.require(${jsonName});`;
+    }
+
+    if (typeof options.onTransform === 'function') {
+        output = options.onTransform(output, this.resourcePath) || output;
+    }
+
+    return output;
 };
 
 module.exports.RequireJsLoaderPlugin = require('./RequireJsLoaderPlugin.js');
